@@ -2,52 +2,39 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
 serve(async (req) => {
   const url = new URL(req.url);
-  const fileCode = url.pathname.slice(1); // URL အနောက်က Code ကိုယူမယ်
+  const fileCode = url.pathname.slice(1); // URL အနောက်က Code (yywjc8s95cfh)
 
-  // Usage: https://your-app.deno.dev/FILE_CODE
   if (!fileCode || fileCode === "favicon.ico") {
-    return new Response("Usage: /FILEMOON_CODE");
+    return new Response("Usage: https://your-app.deno.dev/FILEMOON_CODE");
   }
 
-  // 🔑 မိတ်ဆွေရဲ့ FileMoon API Key
-  const apiKey = "90760ks37a05ztzm9dnyh"; 
-
   try {
-    // 1. FileMoon API ကို လှမ်းမေးမယ်
-    const apiUrl = `https://filemoon.sx/api/file/info?key=${apiKey}&file_code=${fileCode}`;
-    const res = await fetch(apiUrl);
-    const data = await res.json();
-
-    // 2. API က အောင်မြင်ကြောင်း ပြန်ပြောရင်
-    if (data.status === 200 && data.result && data.result[0]) {
-        const fileData = data.result[0];
-        
-        // 🔥 အရေးကြီးဆုံးအပိုင်း 🔥
-        // API ထဲမှာ Direct Link ပါမပါ ရှာမယ်
-        // (Account ပေါ်မူတည်ပြီး 'direct_link', 'download_url', 'hls' အမျိုးမျိုး ရှိတတ်ပါတယ်)
-        
-        // HLS (m3u8) ကို ဦးစားပေးရှာမယ်
-        let targetUrl = fileData.hls || fileData.direct_link || fileData.download_url;
-
-        // API က Link မပေးရင် Embed Page ကို Scrape လုပ်ဖို့ ကြိုးစားမယ် (Plan B)
-        if (!targetUrl) {
-           // Embed Link ရှိရင် အဲ့ဒါကို သွားဖတ်မယ်
-           const embedRes = await fetch(`https://filemoon.sx/e/${fileCode}`);
-           const embedHtml = await embedRes.text();
-           // HTML ထဲက .m3u8 ကို ရှာမယ်
-           const match = embedHtml.match(/file\s*:\s*"([^"]+\.m3u8[^"]*)"/);
-           if (match) targetUrl = match[1];
+    // 1. Embed Page ကို လှမ်းဖတ်မယ် (Browser က ဝင်သလိုမျိုး)
+    const targetUrl = `https://filemoon.sx/e/${fileCode}`;
+    const response = await fetch(targetUrl, {
+        headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Referer": "https://filemoon.sx/"
         }
+    });
+    const html = await response.text();
 
-        // 3. Link ရပြီဆိုရင် User ကို Redirect လုပ်ပေးမယ်
-        if (targetUrl) {
-            return Response.redirect(targetUrl, 302);
-        }
+    // 2. HTML ထဲက .m3u8 link ကို ရှာမယ်
+    // FileMoon က Link ကို file:"..." ဆိုပြီး သိမ်းလေ့ရှိပါတယ်
+    const regex = /file\s*:\s*"([^"]+\.m3u8[^"]*)"/;
+    const match = html.match(regex);
+
+    if (match && match[1]) {
+      const m3u8Link = match[1];
+      
+      // 3. User ကို Link အစစ်ဆီ Redirect လုပ်ပေးမယ်
+      return Response.redirect(m3u8Link, 302);
     }
-
-    return new Response("Direct Link not found (Check API Key or Account Type)", { status: 404 });
+    
+    // ရှာမတွေ့ရင် (Packed Javascript နဲ့ ဝှက်ထားရင်)
+    return new Response("Could not find m3u8 link. FileMoon might be using Packer protection.", { status: 404 });
 
   } catch (err) {
-    return new Response("Server Error: " + err.message, { status: 500 });
+    return new Response("Error: " + err.message, { status: 500 });
   }
 });
